@@ -1,0 +1,244 @@
+#!/bin/sh
+# BlogCam System Info - neofetch style for the web
+
+echo "Content-type: text/html"
+echo ""
+
+# Gather system info
+HOSTNAME=$(hostname)
+KERNEL=$(uname -r)
+UPTIME=$(cut -d. -f1 /proc/uptime)
+UPTIME_DAYS=$((UPTIME / 86400))
+UPTIME_HOURS=$(((UPTIME % 86400) / 3600))
+UPTIME_MINS=$(((UPTIME % 3600) / 60))
+
+# Memory info (in KB from /proc/meminfo)
+MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+MEM_AVAIL=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+MEM_USED=$((MEM_TOTAL - MEM_AVAIL))
+MEM_PERCENT=$((MEM_USED * 100 / MEM_TOTAL))
+
+# CPU info
+CPU_MODEL=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 || echo " ARM Cortex-A7")
+CPU_FREQ=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || echo "unknown")
+if [ "$CPU_FREQ" != "unknown" ]; then
+    CPU_FREQ=$((CPU_FREQ / 1000))
+fi
+
+# Load average
+LOAD=$(cut -d' ' -f1-3 /proc/loadavg)
+
+# CPU usage
+CPU_PREV=$(cat /proc/stat | grep '^cpu ' | awk '{print $2+$3+$4+$5+$6+$7+$8}')
+CPU_IDLE_PREV=$(cat /proc/stat | grep '^cpu ' | awk '{print $5}')
+sleep 0.2
+CPU_NOW=$(cat /proc/stat | grep '^cpu ' | awk '{print $2+$3+$4+$5+$6+$7+$8}')
+CPU_IDLE_NOW=$(cat /proc/stat | grep '^cpu ' | awk '{print $5}')
+CPU_DIFF=$((CPU_NOW - CPU_PREV))
+IDLE_DIFF=$((CPU_IDLE_NOW - CPU_IDLE_PREV))
+if [ "$CPU_DIFF" -gt 0 ]; then
+    CPU_USAGE=$((100 * (CPU_DIFF - IDLE_DIFF) / CPU_DIFF))
+else
+    CPU_USAGE=0
+fi
+
+# Temperature (if available)
+TEMP="N/A"
+if [ -f /sys/class/mstar/msys/TEMP_R ]; then
+    TEMP=$(cat /sys/class/mstar/msys/TEMP_R | awk '{print $2}')
+fi
+
+# Network
+WIFI_IP=$(ifconfig wlan0 2>/dev/null | grep 'inet addr' | cut -d: -f2 | awk '{print $1}' || echo "Not connected")
+WIFI_STATUS="Not connected"
+if [ "$WIFI_IP" != "Not connected" ]; then
+    WIFI_STATUS="Connected"
+fi
+
+# Flash/Storage
+FLASH_TOTAL=$(df -h / 2>/dev/null | tail -1 | awk '{print $2}')
+FLASH_USED=$(df -h / 2>/dev/null | tail -1 | awk '{print $3}')
+FLASH_PERCENT=$(df / 2>/dev/null | tail -1 | awk '{print $5}')
+
+cat <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="5">
+    <title>MiCam</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1b26;
+            color: #a9b1d6;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 40px;
+            max-width: 900px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .ascii-art {
+            color: #7aa2f7;
+            white-space: pre;
+            font-size: 12px;
+            line-height: 1.1;
+            text-align: center;
+        }
+        .info {
+            min-width: 300px;
+        }
+        .info-line {
+            margin: 8px 0;
+            display: flex;
+        }
+        .label {
+            color: #7aa2f7;
+            font-weight: bold;
+            min-width: 100px;
+        }
+        .value { color: #c0caf5; }
+        .bar-container {
+            background: #24283b;
+            border-radius: 4px;
+            height: 16px;
+            width: 150px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        .bar {
+            height: 100%;
+            background: linear-gradient(90deg, #7aa2f7, #bb9af7);
+            transition: width 0.3s;
+        }
+        .header {
+            color: #bb9af7;
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .separator {
+            border: none;
+            border-top: 1px dashed #414868;
+            margin: 15px 0;
+        }
+        .highlight { color: #9ece6a; }
+        .warn { color: #e0af68; }
+        .colors {
+            display: flex;
+            gap: 8px;
+            margin-top: 20px;
+        }
+        .color-block {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #565f89;
+            font-size: 0.8em;
+        }
+        @media (max-width: 600px) {
+            .ascii-art { font-size: 7px; }
+            .container { flex-direction: column; align-items: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="ascii-art">
+___  ____ _____                 
+|  \/  (_)  __ \                
+| .  . |_| /  \/ __ _ _ __ ___  
+| |\/| | | |    / _\` | '_ \` _ \ 
+| |  | | | \__/\ (_| | | | | | |
+\_|  |_/_|\____/\__,_|_| |_| |_|
+                                
+    Running on an E-Waste camera!
+        </div>
+        <div class="info">
+            <div class="header">root@${HOSTNAME}</div>
+            <hr class="separator">
+            <div class="info-line">
+                <span class="label">OS</span>
+                <span class="value">OpenIPC Minimal</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Kernel</span>
+                <span class="value">${KERNEL}</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Uptime</span>
+                <span class="value">${UPTIME_DAYS}d ${UPTIME_HOURS}h ${UPTIME_MINS}m</span>
+            </div>
+            <div class="info-line">
+                <span class="label">CPU</span>
+                <span class="value">${CPU_MODEL} @ ${CPU_FREQ}MHz</span>
+            </div>
+            <div class="info-line">
+                <span class="label">SoC</span>
+                <span class="value">SigmaStar SSC323 (Infinity6)</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Temp</span>
+                <span class="value ${TEMP:+$([ "$TEMP" != "N/A" ] && [ "$TEMP" -gt 60 ] && echo warn || echo highlight)}">${TEMP}${TEMP:+$([ "$TEMP" != "N/A" ] && echo "C")}</span>
+            </div>
+            <div class="info-line">
+                <span class="label">CPU Usage</span>
+                <span class="value">${CPU_USAGE}%</span>
+                <div class="bar-container"><div class="bar" style="width: ${CPU_USAGE}%"></div></div>
+            </div>
+            <div class="info-line">
+                <span class="label">Load</span>
+                <span class="value">${LOAD}</span>
+            </div>
+            <hr class="separator">
+            <div class="info-line">
+                <span class="label">Memory</span>
+                <span class="value">$((MEM_USED / 1024))M / $((MEM_TOTAL / 1024))M (${MEM_PERCENT}%)</span>
+                <div class="bar-container"><div class="bar" style="width: ${MEM_PERCENT}%"></div></div>
+            </div>
+            <div class="info-line">
+                <span class="label">Storage</span>
+                <span class="value">${FLASH_USED} / ${FLASH_TOTAL} (${FLASH_PERCENT})</span>
+            </div>
+            <hr class="separator">
+            <div class="info-line">
+                <span class="label">WiFi</span>
+                <span class="value">${WIFI_STATUS}</span>
+            </div>
+            <div class="info-line">
+                <span class="label">IP</span>
+                <span class="value highlight">${WIFI_IP}</span>
+            </div>
+            <div class="colors">
+                <div class="color-block" style="background: #f7768e"></div>
+                <div class="color-block" style="background: #9ece6a"></div>
+                <div class="color-block" style="background: #e0af68"></div>
+                <div class="color-block" style="background: #7aa2f7"></div>
+                <div class="color-block" style="background: #bb9af7"></div>
+                <div class="color-block" style="background: #7dcfff"></div>
+            </div>
+            <div class="footer">
+                Auto-refreshes every 5 seconds<br>
+                Made with bad ideas and cursed hardware<br>
+                Powered by BusyBox httpd
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+EOF

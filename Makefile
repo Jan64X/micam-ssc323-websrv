@@ -8,9 +8,17 @@ CONFIG = $(error variable BOARD is not defined)
 TIMER := $(shell date +%s)
 
 CONFIG := br-ext-chip-sigmastar/configs/ssc323_lite_defconfig
+
+# Override for minimal build: make minimal
+ifeq ($(MAKECMDGOALS),minimal)
+CONFIG := br-ext-chip-sigmastar/configs/ssc323_minimal_defconfig
+endif
+
 include $(CONFIG)
 
 all: build repack timer
+
+minimal: build repack timer
 
 build: defconfig
 	@$(BR_MAKE) all
@@ -29,6 +37,8 @@ prepare:
 
 help:
 	@printf "BR-OpenIPC usage:\n \
+	- make all - build standard lite firmware\n \
+	- make minimal - build minimal BlogCam firmware (WiFi + SSH + web status)\n \
 	- make list - show available device configurations\n \
 	- make deps - install build dependencies\n \
 	- make clean - remove defconfig and target folder\n \

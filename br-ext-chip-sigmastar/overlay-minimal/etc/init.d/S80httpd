@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# Start the BusyBox httpd web server
+#
+
+WEBROOT="/var/www"
+PORT="80"
+PIDFILE="/var/run/httpd.pid"
+
+start() {
+    printf "Starting httpd: "
+    start-stop-daemon -S -q -m -b -p "$PIDFILE" \
+        -x /usr/sbin/httpd -- -f -p "$PORT" -h "$WEBROOT"
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+}
+
+stop() {
+    printf "Stopping httpd: "
+    start-stop-daemon -K -q -p "$PIDFILE"
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    rm -f "$PIDFILE"
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|reload)
+        restart
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit $?

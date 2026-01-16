@@ -1,0 +1,336 @@
+#!/bin/sh
+# BlogCam System Info - neofetch style for the web
+
+echo "Content-type: text/html"
+echo ""
+
+# Gather system info
+HOSTNAME=$(hostname)
+KERNEL=$(uname -r)
+UPTIME=$(cut -d. -f1 /proc/uptime)
+UPTIME_DAYS=$((UPTIME / 86400))
+UPTIME_HOURS=$(((UPTIME % 86400) / 3600))
+UPTIME_MINS=$(((UPTIME % 3600) / 60))
+
+# Memory info (in KB from /proc/meminfo)
+MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+MEM_AVAIL=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+MEM_USED=$((MEM_TOTAL - MEM_AVAIL))
+MEM_PERCENT=$((MEM_USED * 100 / MEM_TOTAL))
+
+# CPU info
+CPU_MODEL=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 || echo " ARM Cortex-A7")
+CPU_FREQ=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || echo "unknown")
+if [ "$CPU_FREQ" != "unknown" ]; then
+    CPU_FREQ=$((CPU_FREQ / 1000))
+fi
+
+# Load average
+LOAD=$(cut -d' ' -f1-3 /proc/loadavg)
+
+# CPU usage
+CPU_PREV=$(cat /proc/stat | grep '^cpu ' | awk '{print $2+$3+$4+$5+$6+$7+$8}')
+CPU_IDLE_PREV=$(cat /proc/stat | grep '^cpu ' | awk '{print $5}')
+sleep 0.2
+CPU_NOW=$(cat /proc/stat | grep '^cpu ' | awk '{print $2+$3+$4+$5+$6+$7+$8}')
+CPU_IDLE_NOW=$(cat /proc/stat | grep '^cpu ' | awk '{print $5}')
+CPU_DIFF=$((CPU_NOW - CPU_PREV))
+IDLE_DIFF=$((CPU_IDLE_NOW - CPU_IDLE_PREV))
+if [ "$CPU_DIFF" -gt 0 ]; then
+    CPU_USAGE=$((100 * (CPU_DIFF - IDLE_DIFF) / CPU_DIFF))
+else
+    CPU_USAGE=0
+fi
+
+# Temperature (sigmastar proprietary path)
+TEMP="N/A"
+if [ -f /sys/class/mstar/msys/TEMP_R ]; then
+    TEMP=$(cat /sys/class/mstar/msys/TEMP_R | awk '{print $2}')
+fi
+
+# Network
+WIFI_IP=$(ifconfig wlan0 2>/dev/null | grep 'inet addr' | cut -d: -f2 | awk '{print $1}' || echo "Not connected")
+WIFI_STATUS="Not connected"
+if [ "$WIFI_IP" != "Not connected" ]; then
+    WIFI_STATUS="Connected"
+fi
+
+# Flash/Storage
+FLASH_TOTAL=$(df -h / 2>/dev/null | tail -1 | awk '{print $2}')
+FLASH_USED=$(df -h / 2>/dev/null | tail -1 | awk '{print $3}')
+FLASH_PERCENT=$(df / 2>/dev/null | tail -1 | awk '{print $5}')
+
+# Request counter
+HITS=$(cat /var/www_hits 2>/dev/null || echo 0)
+HITS=$((HITS + 1))
+echo $HITS > /var/www_hits
+
+cat <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="5">
+    <title>MiCam - Jan Petrlík</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --border: #30363d;
+            --success: #3fb950;
+            --warning: #d29922;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header-bar {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .logo {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover {
+            color: var(--text-primary);
+        }
+        .container {
+            flex: 1;
+            display: flex;
+            gap: 40px;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .ascii-art {
+            color: var(--accent);
+            white-space: pre;
+            font-size: 10px;
+            line-height: 1.1;
+            text-align: center;
+            background-color: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        .info {
+            min-width: 300px;
+            background-color: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        .info-line {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+        }
+        .label {
+            color: var(--accent);
+            font-weight: bold;
+            min-width: 100px;
+        }
+        .value { color: var(--text-primary); }
+        .bar-container {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            height: 16px;
+            width: 150px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+            border: 1px solid var(--border);
+        }
+        .bar {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+        .header {
+            color: var(--accent);
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .separator {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 15px 0;
+        }
+        .highlight { color: var(--success); }
+        .warn { color: var(--warning); }
+        .footer-bar {
+            background-color: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 1.5rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        @media (max-width: 768px) {
+            .ascii-art { font-size: 7px; padding: 1rem; }
+            .container { flex-direction: column; align-items: center; padding: 1rem; }
+            .info { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header-bar">
+        <a href="https://blogcam.janpetrlik.com" class="logo">~/micam</a>
+        <div class="nav-links">
+            <a href="https://janpetrlik.com">Home</a>
+            <a href="https://janpetrlik.com/blog/hacking-xiaomi-camera">Blog Post</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="ascii-art">
+___  ____ _____                 
+|  \/  (_)  __ \                
+| .  . |_| /  \/ __ _ _ __ ___  
+| |\/| | | |    / _\` | '_ \` _ \ 
+| |  | | | \__/\ (_| | | | | | |
+\_|  |_/_|\____/\__,_|_| |_| |_|
+                                                                  
+             .:::....               
+         .:-@%%%%%%%%@+..:          
+      ...-%######%%%%@@@@....       
+    ....:%#######%%%@@@@@*....      
+   .....:%#**##%%%@@@@@@@%......    
+  ......-%##.:--=+**%@@@@@.......   
+ .......-%+:--=+**##@@@@@@.:.....   
+ .......-#--=+%++#%@@@@@@@.::....:  
+........-==+*%###%@@@@@@@@.:::...:  
+........=+**#%%@@%@@%@@%%@.:::...:  
+ .......=%##%%@%@@@%@%%%%@:::::..:  
+ :......-@%@@@@@@@@%%%%%%#:::::::   
+  :......+%%%@@@%%%%%%%%%:-::::::   
+  .:::::::=%%%@@@@%%%%%%:--:::::    
+    ::::::::=%%%%%%%%=:------:-     
+     ::::::::---:::----------       
+       --=======++++++++++==        
+     ..........:::::::::::::-       
+    ................::::.....::     
+   ............................:    
+  ..............................:   
+ ................................   
+ ..............:MI:..............:  
+..................................  
+..................................  
+................................... 
+:-:..........................:::--  
+  -------------------------------   
+       -------------------==        
+                                         
+    Running on an E-Waste camera!
+        </div>
+        <div class="info">
+            <div class="header">root@${HOSTNAME}</div>
+            <hr class="separator">
+            <div class="info-line">
+                <span class="label">OS</span>
+                <span class="value">Custom OpenIPC-based Minimal</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Kernel</span>
+                <span class="value">${KERNEL}</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Uptime</span>
+                <span class="value">${UPTIME_DAYS}d ${UPTIME_HOURS}h ${UPTIME_MINS}m</span>
+            </div>
+            <div class="info-line">
+                <span class="label">CPU</span>
+                <span class="value">${CPU_MODEL} @ ${CPU_FREQ}MHz</span>
+            </div>
+            <div class="info-line">
+                <span class="label">SoC</span>
+                <span class="value">SigmaStar SSC323 (Infinity6)</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Temp</span>
+                <span class="value ${TEMP:+$([ "$TEMP" != "N/A" ] && [ "$TEMP" -gt 60 ] && echo warn || echo highlight)}">${TEMP}${TEMP:+$([ "$TEMP" != "N/A" ] && echo "C")}</span>
+            </div>
+            <div class="info-line">
+                <span class="label">CPU Usage</span>
+                <span class="value">${CPU_USAGE}%</span>
+                <div class="bar-container"><div class="bar" style="width: ${CPU_USAGE}%"></div></div>
+            </div>
+            <div class="info-line">
+                <span class="label">Load</span>
+                <span class="value">${LOAD}</span>
+            </div>
+            <hr class="separator">
+            <div class="info-line">
+                <span class="label">Memory</span>
+                <span class="value">$((MEM_USED / 1024))M / $((MEM_TOTAL / 1024))M (${MEM_PERCENT}%)</span>
+                <div class="bar-container"><div class="bar" style="width: ${MEM_PERCENT}%"></div></div>
+            </div>
+            <div class="info-line">
+                <span class="label">Requests</span>
+                <span class="value highlight">${HITS}</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Storage</span>
+                <span class="value">${FLASH_USED} / ${FLASH_TOTAL} (${FLASH_PERCENT})</span>
+            </div>
+            <hr class="separator">
+            <div class="info-line">
+                <span class="label">WiFi</span>
+                <span class="value">${WIFI_STATUS}</span>
+            </div>
+            <div class="info-line">
+                <span class="label">Ethernet</span>
+                <span class="value">None</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer-bar">
+        <p>Auto-refreshes every 5 seconds &bull; Powered by BusyBox httpd &bull; Made with bad ideas and cursed hardware</p>
+        <p>&copy; Jan Petrlík</p>
+    </div>
+</body>
+</html>
+EOF
