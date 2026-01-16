@@ -1,21 +1,8 @@
-# MJXSJ05CM ip camera image(ssc323)
+# SSC323 camera firmware mod
 
-this is a repo that focus on building nor flash image for MJXSJ05CM (ssc323) based on OPENIPC.
-
-After flashing the release firmware binary image directly to the nor flash,
-you should connect your pc to the UART serial port on the board. 
-After logging with username: root, password:12345, setup three u-boot env variables with command:
-
-```
-fw_setenv wlandev mt7601u-ssc323-xiaomi
-fw_setenv wlanssid [your_wifi_ssid]
-fw_setenv wlanpass [your_wifi_password]
-```
-
-check the env variables with fw_printenv and reboot, after reboot, wlan0 should be up and connected to your AP
-and start a web ui on http://your_cam_ip:85.
-
-![web ui](image.png)
+This is an image for SSC323 to run cursed webserver firmware on the camera.
+Based on OpenIPC port from [NTUT-112-2-self-learning/MJXSJ05CM](https://github.com/NTUT-112-2-self-learning/MJXSJ05CM)
+Check out my blog post about this here: [janpetrlik.com/blog/ewaste-camera](https://janpetrlik.com/blog/ewaste-camera/)
 
 - - -
 
